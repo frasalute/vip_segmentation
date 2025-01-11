@@ -4,6 +4,28 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 
+# convert PNG to JPEG because ICC embedded is corrupt or incorrectly formatted
+# the warning will still pop up because of this transformation but doesn't inder execution of code
+def convert_png_to_jpeg(input_dir, output_dir):
+    """
+    Converts all PNG images in the input directory to JPEG format and saves them in the output directory.
+    Args:
+        input_dir: Directory containing PNG images.
+        output_dir: Directory to save converted JPEG images.
+    """
+    os.makedirs(output_dir, exist_ok=True)  
+    png_files = glob.glob(os.path.join(input_dir, '*.png'))  
+
+    for png_file in png_files:
+        image = cv2.imread(png_file)
+
+        base_name = os.path.basename(png_file)
+        jpeg_file = os.path.join(output_dir, base_name.replace('.png', '.jpg'))
+     
+        cv2.imwrite(jpeg_file, image, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        print(f"Converted: {png_file} -> {jpeg_file}")
+    return glob.glob(os.path.join(output_dir, '*.jpg'))  
+
 # Load a grayscale image
 def load_image(image_path):
     """Loads a grayscale image."""
@@ -72,11 +94,9 @@ if __name__ == "__main__":
 # 1) Gather Images
 # ---------------------------------------------------------------------
     data_dir = "images"  
-    image_paths = []
+    converted_dir = "converted_images"  
 
-    img_files = glob.glob(os.path.join(data_dir, '*.png'))  
-    for f in img_files:
-        image_paths.append(f)
+    image_paths = convert_png_to_jpeg(data_dir, converted_dir)
 
 # ---------------------------------------------------------------------
 # 1) K - Means
