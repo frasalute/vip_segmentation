@@ -88,6 +88,63 @@ def plot_k_means_results(image_path, original_image, segmented_images, k_values)
 
     plt.show()
 
+def clean_segmentation(image, neighborhood=4, threshold_ratio=1.0, iterations=1):
+    """
+    Cleans and denoises the segmented image by removing small holes.
+    Args:
+        image: segmented image (2D NumPy array) with discrete labels.
+        neighborhood: 4 or 8 for the neighborhood system.
+        threshold_ratio: ratio of neighbors that need to agree for majority label assignment 
+                         (e.g., 1.0 means all neighbors must agree).
+        iterations: number of times to apply the cleaning algorithm.
+    Returns:
+        cleaned_image: denoised segmented image.
+    """
+    def get_neighbors(x, y, img_shape, neighborhood):
+        neighbors = []
+        rows, cols = img_shape
+        
+        # 4-pixel neighborhood
+        if neighborhood >= 4:
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:  # Top, Bottom, Left, Right
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < rows and 0 <= ny < cols:
+                    neighbors.append((nx, ny))
+        
+        # 8-pixel neighborhood (add diagonals)
+        if neighborhood == 8:
+            for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:  # Diagonals
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < rows and 0 <= ny < cols:
+                    neighbors.append((nx, ny))
+        
+        return neighbors
+
+    cleaned_image = image.copy()
+    rows, cols = image.shape
+
+    for _ in range(iterations):
+        new_image = cleaned_image.copy()
+        
+        for x in range(rows):
+            for y in range(cols):
+                neighbors = get_neighbors(x, y, (rows, cols), neighborhood)
+                neighbor_labels = [cleaned_image[nx, ny] for nx, ny in neighbors]
+                
+                # Count labels and determine majority
+                label_counts = {label: neighbor_labels.count(label) for label in set(neighbor_labels)}
+                majority_label = max(label_counts, key=label_counts.get)
+                required_votes = int(threshold_ratio * len(neighbors))
+                
+                # Assign majority label if threshold is met
+                if label_counts[majority_label] >= required_votes:
+                    new_image[x, y] = majority_label
+        
+        cleaned_image = new_image
+
+    return cleaned_image
+
+
 # Main Execution
 if __name__ == "__main__":
 # ---------------------------------------------------------------------
@@ -110,3 +167,83 @@ if __name__ == "__main__":
         segmented_images = [k_means_segmentation(original_image, k) for k in k_values]
         
         plot_k_means_results(image_path, original_image, segmented_images, k_values)
+
+
+# ---------------------------------------------------------------------
+# 3) Cleaning and Denoising
+# ---------------------------------------------------------------------
+
+    for image_path in image_paths:
+        original_image = load_image(image_path)
+
+        # Apply K-means segmentation
+        k = 2
+        segmented_image = k_means_segmentation(original_image, k)
+
+        # Clean the segmented image with different parameters
+        cleaned_image_4_50 = clean_segmentation(segmented_image, neighborhood=4, threshold_ratio=0.50, iterations=3)
+        cleaned_image_4_75 = clean_segmentation(segmented_image, neighborhood=4, threshold_ratio=0.75, iterations=3)
+        cleaned_image_4_1 = clean_segmentation(segmented_image, neighborhood=4, threshold_ratio=1, iterations=3)
+        cleaned_image_8_50 = clean_segmentation(segmented_image, neighborhood=8, threshold_ratio=0.5, iterations=3)
+        cleaned_image_8_75 = clean_segmentation(segmented_image, neighborhood=8, threshold_ratio=0.75, iterations=3)
+        cleaned_image_8_1 = clean_segmentation(segmented_image, neighborhood=8, threshold_ratio=1, iterations=3)
+
+        # Plot results to compare
+        fig, axes = plt.subplots(2, 4, figsize=(20, 10))  # 2 rows, 4 columns
+
+        # Add the images and titles to each subplot
+        titles = [
+            "Original", 
+            "Segmented (k=2)", 
+            "Cleaned (4-pixel, T=0.5)", 
+            "Cleaned (4-pixel, T=0.75)", 
+            "Cleaned (4-pixel, T=1)", 
+            "Cleaned (8-pixel, T=0.5)", 
+            "Cleaned (8-pixel, T=0.75)", 
+            "Cleaned (8-pixel, T=1)"
+        ]
+
+        images = [
+            original_image, 
+            segmented_image, 
+            cleaned_image_4_50, 
+            cleaned_image_4_75, 
+            cleaned_image_4_1, 
+            cleaned_image_8_50, 
+            cleaned_image_8_75, 
+            cleaned_image_8_1
+        ]
+
+        # Loop through each axis and add the corresponding image and title
+        for ax, img, title in zip(axes.flat, images, titles):
+            ax.imshow(img, cmap='gray')
+            ax.set_title(title, fontsize=12)
+            ax.axis('off')
+
+        # Adjust spacing between rows and columns
+        plt.subplots_adjust(wspace=0.3, hspace=0.5)  # Add space between plots
+        plt.suptitle("Comparison of Cleaning Results", fontsize=16)
+        plt.show()
+
+
+        # Compare different iterations side by side
+        iterations = [1, 3, 5, 10]
+        cleaned_images = []
+
+        # Generate cleaned images for different iterations
+        for it in iterations:
+            cleaned_image = clean_segmentation(segmented_image, neighborhood=4, threshold_ratio=0.75, iterations=it)
+            cleaned_images.append(cleaned_image)
+
+        # Plot all results in a single figure
+        plt.figure(figsize=(20, 10))  # Adjust the figure size as needed
+        for i, (it, cleaned_image) in enumerate(zip(iterations, cleaned_images)):
+            plt.subplot(1, len(iterations), i + 1)  # Create a subplot for each iteration
+            plt.title(f"Iterations: {it}")
+            plt.imshow(cleaned_image, cmap='gray')
+            plt.axis('off')
+
+        plt.suptitle("Comparison of Cleaning Results Across Iterations", fontsize=16)
+        plt.show()
+
+
