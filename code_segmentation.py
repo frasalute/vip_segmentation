@@ -227,7 +227,6 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------
 # 2) Otsu's Thresholding
 # ---------------------------------------------------------------------
-    # Loop through the images
     for image_path in image_paths:
         original_image = load_image(image_path)
 
