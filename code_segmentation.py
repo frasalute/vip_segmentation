@@ -88,61 +88,143 @@ def plot_k_means_results(image_path, original_image, segmented_images, k_values)
 
     plt.show()
 
+# Single Threshold (2 Classes)
 def otsu_thresholding(image):
     """
-    Performs Otsu's thresholding on a grayscale image.
-    
-    Args:
-        image (np.ndarray): A 2D grayscale image (values from 0-255).
-    
-    Returns:
-        binary_image (np.ndarray): Binarized image using Otsu’s threshold (0 or 255).
-        best_thresh (int): The computed Otsu threshold.
+    Classic Otsu (single threshold => 2 classes).
+    Returns binary_image (0 or 255), and the threshold.
     """
-    import numpy as np
-    
-    # Ensure image is type uint8
     if image.dtype != np.uint8:
         image = image.astype(np.uint8)
-    
-    # 1) Compute histogram
-    hist, _ = np.histogram(image.ravel(), bins=256, range=(0, 256))
-    total_pixels = image.size
-    
-    # 2) Precompute sum over all intensities
-    sum_total = np.dot(hist, np.arange(256))  # sum(i * hist[i])
-    
-    weight_background = 0
-    sum_background = 0
-    
-    max_variance = 0
-    best_thresh = 0
-    
-    # 3) Search for the best threshold
-    for t in range(256):
-        weight_background += hist[t]
-        sum_background += t * hist[t]
         
-        if weight_background == 0:
+    hist, _ = np.histogram(image.ravel(), bins=256, range=(0,256))
+    total = image.size
+    
+    sum_total = np.dot(hist, np.arange(256))
+    sum_bg, w_bg = 0.0, 0.0
+    
+    max_var = -1
+    best_t = 0
+    
+    for t in range(256):
+        w_bg += hist[t]
+        sum_bg += t * hist[t]
+        
+        if w_bg == 0:
             continue
-        weight_foreground = total_pixels - weight_background
-        if weight_foreground == 0:
+        w_fg = total - w_bg
+        if w_fg == 0:
             break
         
-        mean_background = sum_background / weight_background
-        mean_foreground = (sum_total - sum_background) / weight_foreground
+        mean_bg = sum_bg / w_bg
+        mean_fg = (sum_total - sum_bg) / w_fg
         
-        # Between-class variance
-        variance_between = weight_background * weight_foreground * (mean_background - mean_foreground) ** 2
-        
-        if variance_between > max_variance:
-            max_variance = variance_between
-            best_thresh = t
+        between_var = w_bg * w_fg * (mean_bg - mean_fg)**2
+        if between_var > max_var:
+            max_var = between_var
+            best_t = t
     
-    # 4) Apply threshold
-    binary_image = (image > best_thresh).astype(np.uint8) * 255
-    return binary_image, best_thresh
+    bin_img = (image > best_t).astype(np.uint8) * 255
+    return bin_img, best_t
 
+# Two Thresholds (3 Classes)
+def otsu_thresholding_2(image):
+    """
+    Two thresholds => 3 classes.
+    Returns segmented_image (0, 128, 255) and thresholds (t1, t2).
+    """
+    if image.dtype != np.uint8:
+        image = image.astype(np.uint8)
+        
+    hist, _ = np.histogram(image.ravel(), bins=256, range=(0,256))
+    total = image.size
+    
+    p = hist / float(total)
+    P = np.cumsum(p)
+    S = np.cumsum(np.arange(256) * p)
+    mG = S[-1]  
+    
+    max_var = -1
+    best_t1, best_t2 = 0, 0
+    
+    for t1 in range(256):
+        for t2 in range(t1+1, 256):
+            w0 = P[t1]                     # class0: [0..t1]
+            w1 = P[t2] - P[t1]            # class1: (t1..t2]
+            w2 = 1.0 - P[t2]              # class2: (t2..255]
+            if w0 < 1e-12 or w1 < 1e-12 or w2 < 1e-12:
+                continue
+            
+            m0 = S[t1] / w0
+            m1 = (S[t2] - S[t1]) / w1
+            m2 = (S[-1] - S[t2]) / w2
+            
+            var_between = (w0*(m0 - mG)**2 + 
+                           w1*(m1 - mG)**2 + 
+                           w2*(m2 - mG)**2)
+            if var_between > max_var:
+                max_var = var_between
+                best_t1, best_t2 = t1, t2
+    
+    seg_img = np.zeros_like(image)
+    seg_img[image <= best_t1] = 0
+    seg_img[(image > best_t1) & (image <= best_t2)] = 128
+    seg_img[image > best_t2] = 255
+    
+    return seg_img, best_t1, best_t2
+
+# Three Thresholds (4 Classes) 
+def otsu_thresholding_3(image):
+    """
+    Three thresholds => 4 classes.
+    Returns segmented_image (0, 85, 170, 255) and thresholds (t1, t2, t3).
+    """
+    if image.dtype != np.uint8:
+        image = image.astype(np.uint8)
+        
+    hist, _ = np.histogram(image.ravel(), bins=256, range=(0,256))
+    total = image.size
+    
+    p = hist / float(total)
+    P = np.cumsum(p)
+    S = np.cumsum(np.arange(256) * p)
+    mG = S[-1]
+    
+    max_var = -1
+    best_t1, best_t2, best_t3 = 0, 0, 0
+    
+    for t1 in range(256):
+        for t2 in range(t1+1, 256):
+            for t3 in range(t2+1, 256):
+                w0 = P[t1]                   # class0: [0..t1]
+                w1 = P[t2] - P[t1]          # class1: (t1..t2]
+                w2 = P[t3] - P[t2]          # class2: (t2..t3]
+                w3 = 1.0 - P[t3]            # class3: (t3..255]
+                
+                # Avoid empty classes
+                if w0 < 1e-12 or w1 < 1e-12 or w2 < 1e-12 or w3 < 1e-12:
+                    continue
+                
+                m0 = S[t1] / w0
+                m1 = (S[t2] - S[t1]) / w1
+                m2 = (S[t3] - S[t2]) / w2
+                m3 = (S[-1] - S[t3]) / w3
+                
+                var_between = (w0*(m0 - mG)**2 +
+                               w1*(m1 - mG)**2 +
+                               w2*(m2 - mG)**2 +
+                               w3*(m3 - mG)**2)
+                if var_between > max_var:
+                    max_var = var_between
+                    best_t1, best_t2, best_t3 = t1, t2, t3
+    
+    seg_img = np.zeros_like(image)
+    seg_img[image <= best_t1] = 0
+    seg_img[(image > best_t1) & (image <= best_t2)] = 85
+    seg_img[(image > best_t2) & (image <= best_t3)] = 170
+    seg_img[image > best_t3] = 255
+    
+    return seg_img, best_t1, best_t2, best_t3
 
 def clean_segmentation(image, neighborhood=4, threshold_ratio=1.0, iterations=1):
     """
@@ -230,36 +312,76 @@ if __name__ == "__main__":
     for image_path in image_paths:
         original_image = load_image(image_path)
 
-        # Apply Otsu’s thresholding
-        binary_image, threshold_value = otsu_thresholding(original_image)
-        print(f"{os.path.basename(image_path)} | Otsu's threshold = {threshold_value}")
+        # ---- 1) Single-level Otsu
+        bin_img_2class, t_1 = otsu_thresholding(original_image)
 
-        # Compute histogram 
-        hist, bin_edges = np.histogram(original_image.ravel(), bins=256, range=(0,256))
+        # ---- 2) Two thresholds -> 3 classes
+        seg_img_3class, t1_2, t2_2 = otsu_thresholding_2(original_image)
 
-        # Plot everything in one figure, three subplots
-        fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(18,6))
+        # ---- 3) Three thresholds -> 4 classes
+        seg_img_4class, t1_3, t2_3, t3_3 = otsu_thresholding_3(original_image)
 
-        # Subplot 1: Original Image
-        axs[0].imshow(original_image, cmap='gray')
-        axs[0].set_title("Original Image")
-        axs[0].axis('off')  # remove axis ticks
+        # ---- Print thresholds
+        print("\nImage:", os.path.basename(image_path))
+        print(f"  Single Otsu threshold = {t_1}")
+        print(f"  Two thresholds = ({t1_2}, {t2_2})")
+        print(f"  Three thresholds = ({t1_3}, {t2_3}, {t3_3})")
 
-        # Subplot 2: Otsu-Thresholded Image
-        axs[1].imshow(binary_image, cmap='gray')
-        axs[1].set_title(f"Otsu Thresholded (T={threshold_value})")
-        axs[1].axis('off')
 
-        # Subplot 3: Histogram + Threshold Line
-        axs[2].hist(original_image.ravel(), bins=256, range=(0,256), color='blue')
-        axs[2].axvline(threshold_value, color='red', linestyle='--', linewidth=2)
-        axs[2].set_title(f"Histogram\nThreshold = {threshold_value}")
-        axs[2].set_xlabel("Pixel Intensity")
-        axs[2].set_ylabel("Count")
+        fig1, axs1 = plt.subplots(nrows=1, ncols=4, figsize=(20, 5))
+        
+        axs1[0].imshow(original_image, cmap='gray')
+        axs1[0].set_title("Original")
+        axs1[0].axis('off')
 
-        # 5) Show the figure
+        axs1[1].imshow(bin_img_2class, cmap='gray')
+        axs1[1].set_title(f"2-Class Otsu (T={t_1})")
+        axs1[1].axis('off')
+
+        axs1[2].imshow(seg_img_3class, cmap='gray')
+        axs1[2].set_title(f"3-Class Otsu (T1={t1_2}, T2={t2_2})")
+        axs1[2].axis('off')
+
+        axs1[3].imshow(seg_img_4class, cmap='gray')
+        axs1[3].set_title(f"4-Class Otsu\n(T1={t1_3}, T2={t2_3}, T3={t3_3})")
+        axs1[3].axis('off')
+
+        plt.suptitle(f"Threshold Comparisons for {os.path.basename(image_path)}", fontsize=16)
         plt.tight_layout()
         plt.show()
+
+        hist, _ = np.histogram(original_image.ravel(), bins=256, range=(0,256))
+
+        fig2, ax2 = plt.subplots(figsize=(10, 6))
+        # Plot the histogram
+        ax2.bar(range(256), hist, color='blue', width=1.0)
+        
+        # Single threshold 
+        ax2.axvline(x=t_1, color='red', linestyle='--', linewidth=2, 
+                    label=f"Single Otsu: {t_1}")
+
+        # Two thresholds 
+        ax2.axvline(x=t1_2, color='green', linestyle='--', linewidth=2, 
+                    label=f"2-Threshold: {t1_2}")
+        ax2.axvline(x=t2_2, color='green', linestyle='--', linewidth=2, 
+                    label=f"2-Threshold: {t2_2}")
+
+        # Three thresholds
+        ax2.axvline(x=t1_3, color='orange', linestyle='--', linewidth=2, 
+                    label=f"3-Threshold: {t1_3}")
+        ax2.axvline(x=t2_3, color='orange', linestyle='--', linewidth=2, 
+                    label=f"3-Threshold: {t2_3}")
+        ax2.axvline(x=t3_3, color='orange', linestyle='--', linewidth=2, 
+                    label=f"3-Threshold: {t3_3}")
+
+        ax2.set_title(f"Histogram + All Otsu Thresholds\n({os.path.basename(image_path)})")
+        ax2.set_xlabel("Intensity")
+        ax2.set_ylabel("Count")
+        ax2.legend(loc='upper right')
+        
+        plt.tight_layout()
+        plt.show()
+
     
 # ---------------------------------------------------------------------
 # 3) Cleaning and Denoising
