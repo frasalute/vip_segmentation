@@ -321,12 +321,6 @@ if __name__ == "__main__":
         # ---- 3) Three thresholds -> 4 classes
         seg_img_4class, t1_3, t2_3, t3_3 = otsu_thresholding_3(original_image)
 
-        # ---- Print thresholds
-        print("\nImage:", os.path.basename(image_path))
-        print(f"  Single Otsu threshold = {t_1}")
-        print(f"  Two thresholds = ({t1_2}, {t2_2})")
-        print(f"  Three thresholds = ({t1_3}, {t2_3}, {t3_3})")
-
 
         fig1, axs1 = plt.subplots(nrows=1, ncols=4, figsize=(20, 5))
         
@@ -346,7 +340,7 @@ if __name__ == "__main__":
         axs1[3].set_title(f"4-Class Otsu\n(T1={t1_3}, T2={t2_3}, T3={t3_3})")
         axs1[3].axis('off')
 
-        plt.suptitle(f"Threshold Comparisons for {os.path.basename(image_path)}", fontsize=16)
+        plt.suptitle(f"Threshold Comparisons", fontsize=16)
         plt.tight_layout()
         plt.show()
 
@@ -374,7 +368,7 @@ if __name__ == "__main__":
         ax2.axvline(x=t3_3, color='orange', linestyle='--', linewidth=2, 
                     label=f"3-Threshold: {t3_3}")
 
-        ax2.set_title(f"Histogram + All Otsu Thresholds\n({os.path.basename(image_path)})")
+        ax2.set_title(f" Pixel Intensity Histogram + All Otsu Thresholds")
         ax2.set_xlabel("Intensity")
         ax2.set_ylabel("Count")
         ax2.legend(loc='upper right')
