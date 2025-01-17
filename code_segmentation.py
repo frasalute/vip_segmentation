@@ -3,6 +3,7 @@ import glob
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+from skimage.segmentation import chan_vese
 
 # convert PNG to JPEG because ICC embedded is corrupt or incorrectly formatted
 # the warning will still pop up because of this transformation but doesn't inder execution of code
@@ -282,6 +283,40 @@ def clean_segmentation(image, neighborhood=4, threshold_ratio=1.0, iterations=1)
 
     return cleaned_image
 
+# ------------------------------------------------------------------------------
+# NEW: Chan-Vese Segmentation Function
+# ------------------------------------------------------------------------------
+def chan_vese_segmentation(image, mu=0.25, lambda1=1.0, lambda2=1.0, tol=1e-3, max_num_iter=200, dt=0.5, init_level_set="checkerboard"):
+    """
+    Performs Chan-Vese segmentation on a grayscale image using scikit-image's implementation.
+    Args:
+        image: Grayscale image as a 2D NumPy array (uint8).
+        mu, lambda1, lambda2, tol, max_num_iter, dt: Chan-Vese parameters.
+        init_level_set: Initialization for the level set ('checkerboard' or a user-defined array).
+    Returns:
+        A tuple (segmented_cv, cv_result):
+            segmented_cv: A binary mask (0 or 255) after Chan-Vese segmentation.
+            cv_result: The complete result from scikit-image (if extended_output=True):
+                       (segmentation_mask, phi, energies).
+    """
+    
+    float_image = image.astype(float) / 255.0
+
+    cv_result = chan_vese(
+        float_image, 
+        mu=mu, 
+        lambda1=lambda1, 
+        lambda2=lambda2, 
+        tol=tol, 
+        max_num_iter=max_num_iter, 
+        dt=dt, 
+        init_level_set=init_level_set, 
+        extended_output=True
+    )
+    segmentation_boolean = cv_result[0]
+    
+    segmented_cv = segmentation_boolean.astype(np.uint8) * 255
+    return segmented_cv, cv_result
 
 # Main Execution
 if __name__ == "__main__":
@@ -454,4 +489,42 @@ if __name__ == "__main__":
         plt.suptitle("Comparison of Cleaning Results Across Iterations", fontsize=16)
         plt.show()
 
+# ---------------------------------------------------------------------
+# 4) Chan-Vese Segmentation
+# ---------------------------------------------------------------------
+    for image_path in image_paths:
+        original_image = load_image(image_path)
 
+        # Perform Chan-Vese segmentation
+        segmented_cv, (seg_mask, phi, energies) = chan_vese_segmentation(
+            original_image, 
+            mu=0.25, 
+            lambda1=1.0, 
+            lambda2=1.0, 
+            tol=1e-3, 
+            max_num_iter=200, 
+            dt=0.5, 
+            init_level_set="checkerboard"
+        )
+
+        # Plot the results
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 7))
+        
+        ax1.imshow(original_image, cmap='gray')
+        ax1.set_title("Original Image")
+        ax1.axis('off')
+
+        ax2.imshow(segmented_cv, cmap='gray')
+        ax2.set_title("Chan-Vese Segmentation")
+        ax2.axis('off')
+
+        plt.suptitle(f"Chan-Vese Segmentation on {os.path.basename(image_path)}", fontsize=16)
+        plt.show()
+
+
+        plt.figure(figsize=(10, 5))
+        plt.plot(energies, 'r')
+        plt.title("Chan-Vese Energy Evolution")
+        plt.xlabel("Iteration")
+        plt.ylabel("Energy")
+        plt.show()
