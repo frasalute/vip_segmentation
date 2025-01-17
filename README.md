@@ -10,4 +10,4 @@ Afterwards, run the script using:
 ```bash
 python -m code_segmentation
 ```
-
+The script will produce the original images and the applied segmentation algorhitm applied to them.
