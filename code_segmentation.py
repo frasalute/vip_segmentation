@@ -88,6 +88,62 @@ def plot_k_means_results(image_path, original_image, segmented_images, k_values)
 
     plt.show()
 
+def otsu_thresholding(image):
+    """
+    Performs Otsu's thresholding on a grayscale image.
+    
+    Args:
+        image (np.ndarray): A 2D grayscale image (values from 0-255).
+    
+    Returns:
+        binary_image (np.ndarray): Binarized image using Otsu’s threshold (0 or 255).
+        best_thresh (int): The computed Otsu threshold.
+    """
+    import numpy as np
+    
+    # Ensure image is type uint8
+    if image.dtype != np.uint8:
+        image = image.astype(np.uint8)
+    
+    # 1) Compute histogram
+    hist, _ = np.histogram(image.ravel(), bins=256, range=(0, 256))
+    total_pixels = image.size
+    
+    # 2) Precompute sum over all intensities
+    sum_total = np.dot(hist, np.arange(256))  # sum(i * hist[i])
+    
+    weight_background = 0
+    sum_background = 0
+    
+    max_variance = 0
+    best_thresh = 0
+    
+    # 3) Search for the best threshold
+    for t in range(256):
+        weight_background += hist[t]
+        sum_background += t * hist[t]
+        
+        if weight_background == 0:
+            continue
+        weight_foreground = total_pixels - weight_background
+        if weight_foreground == 0:
+            break
+        
+        mean_background = sum_background / weight_background
+        mean_foreground = (sum_total - sum_background) / weight_foreground
+        
+        # Between-class variance
+        variance_between = weight_background * weight_foreground * (mean_background - mean_foreground) ** 2
+        
+        if variance_between > max_variance:
+            max_variance = variance_between
+            best_thresh = t
+    
+    # 4) Apply threshold
+    binary_image = (image > best_thresh).astype(np.uint8) * 255
+    return binary_image, best_thresh
+
+
 def clean_segmentation(image, neighborhood=4, threshold_ratio=1.0, iterations=1):
     """
     Cleans and denoises the segmented image by removing small holes.
@@ -168,7 +224,44 @@ if __name__ == "__main__":
         
         plot_k_means_results(image_path, original_image, segmented_images, k_values)
 
+# ---------------------------------------------------------------------
+# 2) Otsu's Thresholding
+# ---------------------------------------------------------------------
+    # Loop through the images
+    for image_path in image_paths:
+        original_image = load_image(image_path)
 
+        # Apply Otsu’s thresholding
+        binary_image, threshold_value = otsu_thresholding(original_image)
+        print(f"{os.path.basename(image_path)} | Otsu's threshold = {threshold_value}")
+
+        # Compute histogram 
+        hist, bin_edges = np.histogram(original_image.ravel(), bins=256, range=(0,256))
+
+        # Plot everything in one figure, three subplots
+        fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(18,6))
+
+        # Subplot 1: Original Image
+        axs[0].imshow(original_image, cmap='gray')
+        axs[0].set_title("Original Image")
+        axs[0].axis('off')  # remove axis ticks
+
+        # Subplot 2: Otsu-Thresholded Image
+        axs[1].imshow(binary_image, cmap='gray')
+        axs[1].set_title(f"Otsu Thresholded (T={threshold_value})")
+        axs[1].axis('off')
+
+        # Subplot 3: Histogram + Threshold Line
+        axs[2].hist(original_image.ravel(), bins=256, range=(0,256), color='blue')
+        axs[2].axvline(threshold_value, color='red', linestyle='--', linewidth=2)
+        axs[2].set_title(f"Histogram\nThreshold = {threshold_value}")
+        axs[2].set_xlabel("Pixel Intensity")
+        axs[2].set_ylabel("Count")
+
+        # 5) Show the figure
+        plt.tight_layout()
+        plt.show()
+    
 # ---------------------------------------------------------------------
 # 3) Cleaning and Denoising
 # ---------------------------------------------------------------------
